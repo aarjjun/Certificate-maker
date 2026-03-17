@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Certificate Generator — Premium Edition</title>
+  <meta name="description"
+    content="Upload a certificate template and an Excel sheet, position text fields visually, and batch-generate certificates as a ZIP download." />
+
+  <!-- Premium Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;700;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+    rel="stylesheet">
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  <!-- Fabric.js from CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.0/fabric.min.js"></script>
+</head>
+
+<body>
+
+  <!-- Animated Background Elements -->
+  <div class="bg-orb orb-1"></div>
+  <div class="bg-orb orb-2"></div>
+  <div class="bg-orb orb-3"></div>
+  <div class="bg-grid"></div>
+
+  <div class="app-wrapper">
+
+    <!-- ===== Header ===== -->
+    <header class="app-header">
+      <div class="badge">Next Gen Utility</div>
+      <h1>Certificate Generator</h1>
+      <p>Seamlessly pair your templates &amp; data to batch-export Pixel-Perfect certificates.</p>
+    </header>
+
+    <!-- ===== Step Navigation ===== -->
+    <nav class="steps-nav" aria-label="Steps">
+      <div class="step-pill active" data-step="1">
+        <div class="glow-ring"></div>
+        <div class="num">1</div>
+        <div class="label">Template</div>
+      </div>
+      <div class="step-divider"></div>
+      <div class="step-pill" data-step="2">
+        <div class="glow-ring"></div>
+        <div class="num">2</div>
+        <div class="label">Data</div>
+      </div>
+      <div class="step-divider"></div>
+      <div class="step-pill" data-step="3">
+        <div class="glow-ring"></div>
+        <div class="num">3</div>
+        <div class="label">Design</div>
+      </div>
+      <div class="step-divider"></div>
+      <div class="step-pill" data-step="4">
+        <div class="glow-ring"></div>
+        <div class="num">4</div>
+        <div class="label">Export</div>
+      </div>
+      <div class="step-divider"></div>
+      <div class="step-pill" data-step="5">
+        <div class="glow-ring"></div>
+        <div class="num">5</div>
+        <div class="label">Done</div>
+      </div>
+    </nav>
+
+    <!-- ===================================================
+         STEP 1 — Upload Template
+         =================================================== -->
+    <section class="step-section active" data-step="1">
+      <div class="card glass-card">
+        <div class="card-title">📄 Step 1 — Upload Certificate Template</div>
+        <div class="card-subtitle">Upload a pristine PNG or JPEG of your blank certificate.</div>
+
+        <div class="upload-zone interactive-zone" id="template-zone">
+          <input type="file" id="template-input" accept=".png,.jpg,.jpeg" />
+          <div class="upload-icon">🖼️</div>
+          <p><strong>Drag &amp; drop</strong> your template here, or click to browse</p>
+          <p class="format-note">PNG • JPG • High Resolution Recommended</p>
+        </div>
+
+        <div id="template-preview-wrap" class="hidden-init">
+          <p class="section-label">✅ Template Preview:</p>
+          <img id="template-preview-img" src="" alt="Certificate template preview" />
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btn-next-1" disabled onclick="goToStep(2)">
+            Continue to Data Upload <span class="arr">→</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================
+         STEP 2 — Upload Excel
+         =================================================== -->
+    <section class="step-section" data-step="2">
+      <div class="card glass-card">
+        <div class="card-title">📊 Step 2 — Upload Excel Data</div>
+        <div class="card-subtitle">
+          Provide your participant roster in <strong>.xlsx</strong> format.
+          Ensure the first row contains column headers (Name, Award, Date, etc.).
+        </div>
+
+        <div class="upload-zone interactive-zone" id="excel-zone">
+          <input type="file" id="excel-input" accept=".xlsx,.xls" />
+          <div class="upload-icon">📋</div>
+          <p><strong>Drag &amp; drop</strong> your Excel file here, or click to browse</p>
+          <p class="format-note">.xlsx format only</p>
+        </div>
+
+        <div id="excel-columns-wrap" class="hidden-init">
+          <p class="section-label">✅ Detected Fields mapping:</p>
+          <div class="column-tags" id="column-tags"></div>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="goToStep(1)"><span class="arr">←</span> Back</button>
+          <button class="btn btn-primary" id="btn-next-2" disabled onclick="goToStep(3)">
+            Enter Studio Editor <span class="arr">→</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================
+         STEP 3 — Field Placement Editor
+         =================================================== -->
+    <section class="step-section" data-step="3" id="editor-section">
+      <div class="card glass-card editor-card">
+        <div class="editor-header">
+          <div>
+            <div class="card-title">🎨 Studio Editor</div>
+            <div class="card-subtitle" style="margin-bottom:0">
+              Map your Excel headers to the canvas. Precision drag, size, and style.
+            </div>
+          </div>
+          <div class="editor-actions">
+            <button class="btn btn-primary btn-sm" onclick="addField()">＋ Add Field</button>
+            <button class="btn btn-secondary btn-sm" onclick="saveConfig()">💾 Save Config</button>
+          </div>
+        </div>
+
+        <div class="editor-layout">
+
+          <!-- Canvas -->
+          <div class="canvas-container-wrap">
+            <div id="canvas-wrap">
+              <canvas id="editor-canvas"></canvas>
+            </div>
+          </div>
+
+          <!-- Sidebar -->
+          <div class="editor-panel glass-panel">
+            <h3>🗂️ Typography & Mapping</h3>
+            <p class="panel-desc">
+              Select a field on the canvas or from the list to tune its alignment, font family, and scale.
+            </p>
+            <div class="field-list-scroll">
+              <div id="field-list">
+                <div class="empty-state">
+                  <span class="ico">✨</span>
+                  No fields yet. Click "Add Field" to start mapping.
+                </div>
+              </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Custom font upload -->
+            <div class="font-upload-section">
+              <h3>🔤 Font Assets</h3>
+              <p class="font-tip">
+                <span class="lbl-cloud">Cloud</span> Search any <strong>Google Font</strong> in the standard
+                dropdown.<br>
+                <span class="lbl-local">Local</span> Need a custom aesthetic? Drop a .ttf/.otf file below.
+              </p>
+              <div class="font-upload-zone upload-zone interactive-zone" id="font-upload-zone">
+                <input type="file" id="custom-font-input" accept=".ttf,.otf,.woff,.woff2" />
+                <span class="upload-icon-sm">📂</span>
+                <div>Drop <strong>.ttf</strong> or <strong>.otf</strong></div>
+              </div>
+              <div class="custom-font-list" id="custom-font-list"></div>
+            </div>
+          </div>
+
+        </div><!-- /.editor-layout -->
+
+        <div class="btn-row" style="margin-top:24px; justify-content: space-between;">
+          <button class="btn btn-secondary" onclick="goToStep(2)"><span class="arr">←</span> Modify Data</button>
+          <button class="btn btn-primary btn-glow" onclick="goToStep(4)">Proceed to Render Engine <span
+              class="arr">→</span></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================
+         STEP 4 — Generate Certificates
+         =================================================== -->
+    <section class="step-section" data-step="4">
+      <div class="card glass-card">
+        <div class="card-title">⚙️ Generation Engine</div>
+        <div class="card-subtitle">
+          Ensure flawless accuracy with a preview before initiating the batch render sequence.
+        </div>
+
+        <div class="generation-info glass-panel">
+          <div class="info-pill"><span>✅</span> Template Integrity</div>
+          <div class="info-pill"><span>✅</span> Data Mapping</div>
+          <div class="info-pill active-pill"><span id="info-fields-count">0</span> Active Fields</div>
+        </div>
+
+        <!-- Progress -->
+        <div class="progress-wrap" id="progress-wrap">
+          <div class="progress-bar">
+            <div class="progress-fill" id="progress-fill">
+              <div class="shimmer"></div>
+            </div>
+          </div>
+          <p class="progress-label" id="progress-label">Compiling assets…</p>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="goToStep(3)"><span class="arr">←</span> Back</button>
+          <button class="btn btn-secondary" id="btn-preview" onclick="previewCertificate()">
+            👁️ Preview Single
+          </button>
+          <button class="btn btn-primary btn-glow btn-lg" id="btn-generate" onclick="generateAll()">
+            🚀 Execute Batch Render
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================
+         STEP 5 — Download
+         =================================================== -->
+    <section class="step-section" data-step="5">
+      <div class="card glass-card success-card">
+        <div class="download-box">
+          <div class="success-ring">
+            <div class="download-icon-big">✨</div>
+          </div>
+          <h2>Mission Accomplished</h2>
+          <p>All certificates have been immaculately rendered and securely archived.</p>
+
+          <div class="stat-row">
+            <div class="stat glass-panel">
+              <div class="stat-num" id="stat-generated">0</div>
+              <div class="stat-label">Generated Files</div>
+            </div>
+            <div class="stat glass-panel">
+              <div class="stat-num" id="stat-total">0</div>
+              <div class="stat-label">Total Rows</div>
+            </div>
+          </div>
+
+          <button class="btn btn-success btn-glow btn-xl" onclick="downloadZip()">
+            <span class="icon">⏬</span> Download ZIP Archive
+          </button>
+
+          <div class="btn-row end-actions">
+            <button class="btn btn-ghost" onclick="goToStep(3)">Revise Fields</button>
+            <button class="btn btn-ghost" onclick="location.reload()">Start New Batch</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div><!-- /.app-wrapper -->
+
+  <!-- ===== Footer ===== -->
+  <footer class="app-footer">
+    <div class="footer-glass">
+      <div class="footer-tag">
+        Built with <span class="heart">❤️</span> by <a href="#" class="author-name">Arjun A</a>
+      </div>
+      <div class="footer-dot"></div>
+      <div class="footer-brand">Professional Certificate Generator</div>
+    </div>
+  </footer>
+
+  <!-- ===== Preview Modal ===== -->
+  <div id="preview-modal" role="dialog" aria-modal="true" aria-label="Certificate Preview">
+    <div class="preview-modal-inner glass-card">
+      <button class="modal-close" onclick="closePreview()" aria-label="Close preview">✕</button>
+      <h3>Render Preview — Subject 01</h3>
+      <div class="img-frame">
+        <img id="preview-modal-img" src="" alt="Certificate preview" />
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Toast ===== -->
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <!-- ===== App Script ===== -->
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+
+  <!-- Patch goToStep to update field count badge on step 4 -->
+  <script>
+    const _origGoToStep = goToStep;
+    goToStep = function (step) {
+      _origGoToStep(step);
+      if (step === 4) {
+        const el = document.getElementById("info-fields-count");
+        if (el && typeof state !== "undefined") el.textContent = state.fields.length;
+      }
+    };
+  </script>
+
+</body>
+
+</html>
