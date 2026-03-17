@@ -12,6 +12,8 @@ Each field dict now carries extra keys:
 
 import os
 import re
+import urllib.request
+import urllib.parse
 from PIL import Image, ImageDraw, ImageFont
 
 
@@ -62,8 +64,10 @@ def _auto_shrink_font(
     size = initial_size
     while size >= min_size:
         font = _load_font(font_path, size)
-        bbox = draw.textbbox((0, 0), text, font=font)
-        if (bbox[2] - bbox[0]) <= max_width:
+        # Check multiline width
+        lines = text.split('\n')
+        max_line_width = max(draw.textbbox((0, 0), line, font=font)[2] for line in lines)
+        if max_line_width <= max_width:
             return font
         size -= 1
     return _load_font(font_path, min_size)
@@ -127,8 +131,56 @@ def _resolve_font_path(
         if os.path.isfile(full):
             return full
 
-    # Fallback: use the original path unchanged
     return font_path
+
+
+def _download_google_font(family: str, bold: bool, italic: bool, fonts_dir: str) -> str | None:
+    """
+    Downloads a Google Font `.ttf` into `fonts_dir` if it doesn't already exist.
+    """
+    if not family:
+        return None
+
+    os.makedirs(fonts_dir, exist_ok=True)
+    
+    # Construct a safe filename based on variants
+    suffix = ""
+    if bold and italic: suffix = "-BoldItalic"
+    elif bold: suffix = "-Bold"
+    elif italic: suffix = "-Italic"
+    else: suffix = "-Regular"
+    
+    safe_family = family.replace(" ", "")
+    out_path = os.path.join(fonts_dir, f"{safe_family}{suffix}.ttf")
+    if os.path.isfile(out_path):
+        return out_path
+
+    # Old wget user-agent tricks Google into serving raw .ttf files
+    # We request the family and weight/style combination if needed.
+    # Actually, standard query: family=Montserrat:wght@400;700
+    # Or CSS1: family=Montserrat:400,700,400italic,700italic
+    req_family = urllib.parse.quote(family)
+    weight = "700" if bold else "400"
+    style = "italic" if italic else ""
+    # E.g. Roboto:700italic
+    url = f"https://fonts.googleapis.com/css?family={req_family}:{weight}{style}"
+    
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "wget/1.20"})
+        css = urllib.request.urlopen(req, timeout=5).read().decode('utf-8')
+        # Find url(https://...ttf)
+        match = re.search(r"url\((https://[^)]+\.ttf)\)", css)
+        if match:
+            ttf_url = match.group(1)
+            ttf_data = urllib.request.urlopen(ttf_url, timeout=10).read()
+            with open(out_path, "wb") as f:
+                f.write(ttf_data)
+            return out_path
+    except Exception as e:
+        print(f"Failed to download Google Font {family}: {e}")
+
+    # Fallback: original font path unchanged
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -182,40 +234,29 @@ def generate_certificate(
         alignment  = field.get("align", "center")
         bold       = bool(field.get("bold", False))
         italic     = bool(field.get("italic", False))
-        font_path  = field.get("fontPath")   # may be None if not set
+        font_path  = field.get("fontPath")
+        font_family = field.get("fontFamily")
 
-        # Resolve bold/italic variant of the font
-        font_path = _resolve_font_path(
-            font_path, bold, italic,
-            fonts_dir or output_dir,
-        )
+        # Resolve local variant (if custom font path was provided)
+        if font_path:
+            font_path = _resolve_font_path(font_path, bold, italic, fonts_dir or output_dir)
+        # Or download Google Font
+        elif font_family and fonts_dir:
+            font_path = _download_google_font(font_family, bold, italic, fonts_dir)
 
         try:
             fill_color = _hex_to_rgb(color_hex)
         except Exception:
             fill_color = (0, 0, 0)
 
-        # Auto-shrink: text must fit within 80 % of template width
-        max_text_width = int(img_width * 0.80)
+        max_text_width = int(img_width * 0.85)
         font = _auto_shrink_font(draw, text, font_path, base_size, max_text_width)
 
-        bbox = draw.textbbox((0, 0), text, font=font)
-        text_width  = bbox[2] - bbox[0]
-        text_height = bbox[3] - bbox[1]
-
-        if alignment == "center":
-            draw_x = x - text_width / 2
-        elif alignment == "right":
-            draw_x = x - text_width
-        else:
-            draw_x = x
-
-        draw_y = y - text_height / 2
-
-        # Subtle shadow for readability
+        # Subtle shadow for readability if requested, but generally we draw exactly at (x, y)
+        # Using anchor="mm" aligns the logical horizontal/vertical center exactly to the provided coords
         shadow = (0, 0, 0, 80) if img.mode == "RGBA" else (0, 0, 0)
-        draw.text((draw_x + 1, draw_y + 1), text, font=font, fill=shadow)
-        draw.text((draw_x,     draw_y),     text, font=font, fill=fill_color)
+        draw.multiline_text((x + 1, y + 1), text, font=font, fill=shadow, anchor="mm", align=alignment)
+        draw.multiline_text((x, y), text, font=font, fill=fill_color, anchor="mm", align=alignment)
 
     # Flatten RGBA → RGB
     if img.mode == "RGBA":
