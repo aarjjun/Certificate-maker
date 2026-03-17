@@ -18,6 +18,7 @@ import shutil
 import tempfile
 import uuid
 import zipfile
+import json
 
 from flask import (
     Flask,
@@ -27,7 +28,9 @@ from flask import (
     render_template,
     send_from_directory,
     session,
+    Response,
 )
+from functools import wraps
 from werkzeug.utils import secure_filename
 
 from utils.excel_reader import get_columns, get_rows
@@ -92,12 +95,103 @@ def _session_get(key, default=None):
 
 
 # ---------------------------------------------------------------------------
+# Dynamic Settings & Authentication
+# ---------------------------------------------------------------------------
+
+SETTINGS_FILE = os.path.join(BASE_DIR, "settings.json")
+DEFAULT_SETTINGS = {
+    "is_public_locked": False,
+    "public_password": "mysecretpassword"
+}
+
+def load_settings():
+    if not os.path.exists(SETTINGS_FILE):
+        return DEFAULT_SETTINGS.copy()
+    try:
+        with open(SETTINGS_FILE, "r") as f:
+            data = json.load(f)
+            # Ensure all keys exist
+            for k, v in DEFAULT_SETTINGS.items():
+                if k not in data:
+                    data[k] = v
+            return data
+    except Exception:
+        return DEFAULT_SETTINGS.copy()
+
+def save_settings(data):
+    with open(SETTINGS_FILE, "w") as f:
+        json.dump(data, f, indent=4)
+
+# Admin master credentials (hardcoded or from env, cannot be changed from web for safety)
+admin_username = os.environ.get("ADMIN_USER", "admin")
+admin_password = os.environ.get("ADMIN_PASS", "arjun123")
+
+def authenticate():
+    return Response(
+        'Could not verify your access level for that URL.\n'
+        'You have to login with proper credentials', 401,
+        {'WWW-Authenticate': 'Basic realm="Login Required"'})
+
+def requires_public_auth(f):
+    """Protects the main generator. Uses the dynamic settings.json public password."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        settings = load_settings()
+        if not settings.get("is_public_locked", False):
+            # If lock is off, let everyone in
+            return f(*args, **kwargs)
+            
+        auth = request.authorization
+        # The username doesn't strictly matter for the public lock, just the password, 
+        # but basic auth requires both. We'll accept any username if the password matches.
+        if not auth or auth.password != settings.get("public_password"):
+            return authenticate()
+        return f(*args, **kwargs)
+    return decorated
+
+def requires_admin_auth(f):
+    """Protects the /admin dashboard. Uses the master admin credentials."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth = request.authorization
+        if not auth or auth.username != admin_username or auth.password != admin_password:
+            return authenticate()
+        return f(*args, **kwargs)
+    return decorated
+
+
+# ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
 @app.route("/")
+@requires_public_auth
 def index():
     return render_template("index.html")
+
+# ── Admin Panel ──────────────────────────────────────────────────────────────
+
+@app.route("/admin12arjun")
+@requires_admin_auth
+def admin_dashboard():
+    return render_template("admin.html")
+
+@app.route("/api/admin12arjun/settings", methods=["GET", "POST"])
+@requires_admin_auth
+def admin_settings():
+    if request.method == "GET":
+        return jsonify(load_settings())
+    
+    settings = load_settings()
+    data = request.json or {}
+    
+    if "is_public_locked" in data:
+        settings["is_public_locked"] = bool(data["is_public_locked"])
+    if "public_password" in data and data["public_password"].strip():
+        settings["public_password"] = data["public_password"].strip()
+        
+    save_settings(settings)
+    return jsonify({"success": True})
 
 
 # ── Template upload ──────────────────────────────────────────────────────────
